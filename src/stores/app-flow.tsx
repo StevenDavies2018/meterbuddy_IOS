@@ -28,7 +28,8 @@ const REVENUECAT_PRO_ENTITLEMENTS = [
   REVENUECAT_PRO_ENTITLEMENT,
   REVENUECAT_LEGACY_PRO_ENTITLEMENT,
 ] as const;
-const revenueCatAppleApiKey = process.env.EXPO_PUBLIC_REVENUECAT_APPLE_API_KEY;
+const revenueCatAppleApiKey =
+  process.env.EXPO_PUBLIC_REVENUECAT_APPLE_API_KEY ?? 'test_dpXRsCNTdUjYLcwnWUzmoyBapzw';
 
 type AppFlowContextValue = {
   selectedMeterType: MeterType;
