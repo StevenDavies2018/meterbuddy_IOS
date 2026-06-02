@@ -1,5 +1,5 @@
 import { Image } from 'expo-image';
-import { useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -30,20 +30,29 @@ const steps = [
     title: 'Track the next cycle',
     body: 'After each save, MeterBuddy schedules a 28-day reminder and compares the next reading to your previous one so you can spot changes over time.',
     image: reminderImage,
-    cta: 'Get Started',
+    cta: 'Get started',
   },
 ] as const;
 
 export default function OnboardingScreen() {
   const router = useRouter();
+  const params = useLocalSearchParams<{ source?: string | string[] }>();
   const { completeOnboarding } = useAppFlow();
   const [stepIndex, setStepIndex] = useState(0);
 
   const step = steps[stepIndex];
   const isLastStep = stepIndex === steps.length - 1;
+  const source = Array.isArray(params.source) ? params.source[0] : params.source;
+  const isSettingsPreview = source === 'settings';
 
   function finish() {
     completeOnboarding();
+
+    if (isSettingsPreview) {
+      router.replace('/(tabs)/settings' as never);
+      return;
+    }
+
     router.replace('/sign-in?source=onboarding');
   }
 
@@ -68,10 +77,13 @@ export default function OnboardingScreen() {
               <Image source={logoImage} style={styles.logo} contentFit="contain" />
             </View>
 
-            <Pressable onPress={finish}>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={isSettingsPreview ? 'Close walkthrough' : 'Skip onboarding'}
+              onPress={finish}>
               {({ pressed }) => (
                 <ThemedText style={[isLastStep ? styles.skipDark : styles.skip, pressed && styles.pressedText]}>
-                  {isLastStep ? 'SKIP' : 'Skip'}
+                  {isSettingsPreview ? 'Close' : isLastStep ? 'SKIP' : 'Skip'}
                 </ThemedText>
               )}
             </Pressable>
@@ -93,7 +105,7 @@ export default function OnboardingScreen() {
           {isLastStep ? (
             <View style={styles.metricCard}>
               <View style={styles.metricIconWrap}>
-                <ThemedText style={styles.metricIcon}>⏰</ThemedText>
+                <ThemedText style={styles.metricIcon}>28</ThemedText>
               </View>
               <View style={styles.metricColumn}>
                 <ThemedText style={styles.metricLabel}>NEXT READING DUE</ThemedText>
@@ -113,18 +125,28 @@ export default function OnboardingScreen() {
             ))}
           </View>
 
-          <Pressable onPress={advance}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={isSettingsPreview && isLastStep ? 'Back to settings' : step.cta}
+            onPress={advance}>
             {({ pressed }) => (
               <View style={[styles.primaryButton, pressed && styles.pressedButton]}>
-                <ThemedText style={styles.primaryButtonText}>{step.cta} →</ThemedText>
+                <ThemedText style={styles.primaryButtonText}>
+                  {isSettingsPreview && isLastStep ? 'Back to settings' : `${step.cta} ->`}
+                </ThemedText>
               </View>
             )}
           </Pressable>
 
           {!isLastStep ? (
-            <Pressable onPress={finish}>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={isSettingsPreview ? 'Back to settings' : 'Skip onboarding'}
+              onPress={finish}>
               {({ pressed }) => (
-                <ThemedText style={[styles.bottomSkip, pressed && styles.pressedText]}>Skip onboarding</ThemedText>
+                <ThemedText style={[styles.bottomSkip, pressed && styles.pressedText]}>
+                  {isSettingsPreview ? 'Back to settings' : 'Skip onboarding'}
+                </ThemedText>
               )}
             </Pressable>
           ) : null}
@@ -240,7 +262,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   metricIcon: {
-    fontSize: 26,
+    fontSize: 24,
+    lineHeight: 28,
+    fontWeight: '800',
     color: '#F1A100',
   },
   metricColumn: {

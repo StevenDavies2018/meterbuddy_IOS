@@ -5,7 +5,7 @@ import { useAppFlow } from '@/stores/app-flow';
 
 export default function IndexRedirect() {
   const router = useRouter();
-  const { isBootstrapping, hasCompletedOnboarding, hasCompletedFirstScanPrompt, isAuthenticated } = useAppFlow();
+  const { isBootstrapping, hasCompletedOnboarding } = useAppFlow();
 
   useEffect(() => {
     if (isBootstrapping) {
@@ -17,13 +17,8 @@ export default function IndexRedirect() {
       return;
     }
 
-    if (isAuthenticated && !hasCompletedFirstScanPrompt) {
-      router.replace('/first-scan' as never);
-      return;
-    }
-
     router.replace('/(tabs)' as never);
-  }, [hasCompletedFirstScanPrompt, hasCompletedOnboarding, isAuthenticated, isBootstrapping, router]);
+  }, [hasCompletedOnboarding, isBootstrapping, router]);
 
   return null;
 }

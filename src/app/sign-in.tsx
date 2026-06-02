@@ -12,6 +12,13 @@ import { useAppFlow } from '@/stores/app-flow';
 
 const logoImage = require('../../assets/images/Logo.png');
 const loginImage = require('../../assets/images/Onboard-Login.png');
+const accentBlue = '#1756D1';
+const accentBlueSoft = '#EAF1FF';
+const inkBlue = '#081F5C';
+const borderBlue = '#C8D9FF';
+const errorTint = '#FFF1F1';
+const errorBorder = '#F4CACA';
+const errorText = '#8F1D1D';
 
 export default function SignInScreen() {
   const router = useRouter();
@@ -19,6 +26,7 @@ export default function SignInScreen() {
   const {
     createAccountWithPassword,
     loginWithPassword,
+    sendPasswordReset,
     isAuthenticating,
     authNotice,
     lastError,
@@ -30,7 +38,7 @@ export default function SignInScreen() {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
-  const [mode, setMode] = useState<'create' | 'sign-in'>('create');
+  const [mode, setMode] = useState<'create' | 'sign-in'>('sign-in');
   const source = Array.isArray(params.source) ? params.source[0] : params.source;
 
   function handleBack() {
@@ -59,7 +67,15 @@ export default function SignInScreen() {
       }
 
       await loginWithPassword(normalizedEmail, password);
-      router.replace('/');
+      router.replace('/scan');
+    } catch {
+      // Shared error state is rendered in the UI.
+    }
+  }
+
+  async function handlePasswordReset() {
+    try {
+      await sendPasswordReset(email);
     } catch {
       // Shared error state is rendered in the UI.
     }
@@ -90,40 +106,51 @@ export default function SignInScreen() {
           </View>
 
           <View style={styles.modeRow}>
-            <Pressable onPress={() => setMode('create')} style={styles.modePressable}>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Create account mode"
+              accessibilityState={{ selected: mode === 'create' }}
+              onPress={() => setMode('create')}
+              style={styles.modePressable}>
               {({ pressed }) => (
-                <ThemedView
-                  type={mode === 'create' ? 'backgroundSelected' : 'backgroundElement'}
-                  style={[styles.modeChip, pressed && styles.pressed]}>
-                  <ThemedText type="smallBold">Create account</ThemedText>
-                </ThemedView>
+                <View style={[styles.modeChip, mode === 'create' ? styles.modeChipActive : styles.modeChipInactive, pressed && styles.pressed]}>
+                  <ThemedText type="smallBold" style={mode === 'create' ? styles.modeChipTextActive : styles.modeChipTextInactive}>
+                    Create account
+                  </ThemedText>
+                </View>
               )}
             </Pressable>
 
-            <Pressable onPress={() => setMode('sign-in')} style={styles.modePressable}>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Sign in mode"
+              accessibilityState={{ selected: mode === 'sign-in' }}
+              onPress={() => setMode('sign-in')}
+              style={styles.modePressable}>
               {({ pressed }) => (
-                <ThemedView
-                  type={mode === 'sign-in' ? 'backgroundSelected' : 'backgroundElement'}
-                  style={[styles.modeChip, pressed && styles.pressed]}>
-                  <ThemedText type="smallBold">Sign in</ThemedText>
-                </ThemedView>
+                <View style={[styles.modeChip, mode === 'sign-in' ? styles.modeChipActive : styles.modeChipInactive, pressed && styles.pressed]}>
+                  <ThemedText type="smallBold" style={mode === 'sign-in' ? styles.modeChipTextActive : styles.modeChipTextInactive}>
+                    Sign in
+                  </ThemedText>
+                </View>
               )}
             </Pressable>
           </View>
 
           <ThemedView type="backgroundElement" style={styles.card}>
             <View style={styles.cardIntro}>
-              <ThemedText type="smallBold">
+              <ThemedText type="smallBold" style={styles.formTitle}>
                 {mode === 'create' ? 'Create your MeterBuddy account' : 'Sign in to MeterBuddy'}
               </ThemedText>
-              <ThemedText themeColor="textSecondary">
+              <ThemedText style={styles.formBody}>
                 {mode === 'create'
                   ? 'Your account keeps meter history available on mobile and web, and gives us a durable place to restore your lifetime unlock later.'
                   : 'Use your email and password to access your saved readings, reminders, and synced account history.'}
               </ThemedText>
             </View>
-            <ThemedText type="smallBold">Email address</ThemedText>
+            <ThemedText type="smallBold" style={styles.formLabel}>Email address</ThemedText>
             <TextInput
+              accessibilityLabel="Email address"
               autoCapitalize="none"
               autoCorrect={false}
               keyboardType="email-address"
@@ -134,7 +161,7 @@ export default function SignInScreen() {
               style={styles.input}
             />
 
-            <ThemedText type="smallBold" style={styles.fieldLabel}>
+            <ThemedText type="smallBold" style={[styles.fieldLabel, styles.formLabel]}>
               Password
             </ThemedText>
             <View style={styles.passwordRow}>
@@ -150,10 +177,17 @@ export default function SignInScreen() {
                 onChangeText={setPassword}
                 style={[styles.input, styles.passwordInput]}
               />
-              <Pressable onPress={() => setShowPassword((current) => !current)} style={styles.passwordToggle}>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={showPassword ? 'Hide password' : 'Show password'}
+                accessibilityHint="Toggles whether the password field is visible."
+                onPress={() => setShowPassword((current) => !current)}
+                style={styles.passwordToggle}>
                 {({ pressed }) => (
                   <View style={[styles.passwordToggleChip, pressed && styles.pressed]}>
-                    <ThemedText type="smallBold">{showPassword ? 'Hide' : 'Show'}</ThemedText>
+                    <ThemedText type="smallBold" style={styles.passwordToggleText}>
+                      {showPassword ? 'Hide' : 'Show'}
+                    </ThemedText>
                   </View>
                 )}
               </Pressable>
@@ -161,7 +195,7 @@ export default function SignInScreen() {
 
             {mode === 'create' ? (
               <>
-                <ThemedText type="smallBold" style={styles.fieldLabel}>
+                <ThemedText type="smallBold" style={[styles.fieldLabel, styles.formLabel]}>
                   Confirm password
                 </ThemedText>
                 <View style={styles.passwordRow}>
@@ -177,22 +211,45 @@ export default function SignInScreen() {
                     onChangeText={setConfirmPassword}
                     style={[styles.input, styles.passwordInput]}
                   />
-                  <Pressable onPress={() => setShowConfirmPassword((current) => !current)} style={styles.passwordToggle}>
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel={showConfirmPassword ? 'Hide confirm password' : 'Show confirm password'}
+                    accessibilityHint="Toggles whether the confirm password field is visible."
+                    onPress={() => setShowConfirmPassword((current) => !current)}
+                    style={styles.passwordToggle}>
                     {({ pressed }) => (
                       <View style={[styles.passwordToggleChip, pressed && styles.pressed]}>
-                        <ThemedText type="smallBold">{showConfirmPassword ? 'Hide' : 'Show'}</ThemedText>
+                        <ThemedText type="smallBold" style={styles.passwordToggleText}>
+                          {showConfirmPassword ? 'Hide' : 'Show'}
+                        </ThemedText>
                       </View>
                     )}
                   </Pressable>
                 </View>
-                <ThemedText themeColor="textSecondary">
+                <ThemedText style={styles.formBody}>
                   You may be asked to confirm your email before your first password sign-in.
                 </ThemedText>
               </>
             ) : (
-              <ThemedText themeColor="textSecondary">
-                Sign in with the password you created for your MeterBuddy account.
-              </ThemedText>
+              <>
+                <ThemedText style={styles.formBody}>
+                  Sign in with the password you created for your MeterBuddy account.
+                </ThemedText>
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel="Reset password"
+                  accessibilityHint="Sends a password reset email to the email address entered above."
+                  disabled={isAuthenticating}
+                  onPress={() => void handlePasswordReset()}>
+                  {({ pressed }) => (
+                    <View style={[styles.resetPasswordButton, pressed && styles.pressed, isAuthenticating && styles.disabledButton]}>
+                      <ThemedText type="smallBold" style={styles.resetPasswordText}>
+                        Forgot password?
+                      </ThemedText>
+                    </View>
+                  )}
+                </Pressable>
+              </>
             )}
           </ThemedView>
 
@@ -201,11 +258,14 @@ export default function SignInScreen() {
               <ThemedText type="smallBold">Account status</ThemedText>
               <ThemedText>{authNotice}</ThemedText>
               {isAuthenticated ? (
-                <Pressable onPress={() => router.replace('/')}>
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel="Start first scan"
+                  onPress={() => router.replace('/scan')}>
                   {({ pressed }) => (
-                    <ThemedView type="backgroundSelected" style={[styles.inlineButton, pressed && styles.pressed]}>
-                      <ThemedText type="smallBold">Continue to MeterBuddy</ThemedText>
-                    </ThemedView>
+                    <View style={[styles.inlineButton, pressed && styles.pressed]}>
+                      <ThemedText type="smallBold" style={styles.primaryButtonText}>Start first scan</ThemedText>
+                    </View>
                   )}
                 </Pressable>
               ) : null}
@@ -213,27 +273,35 @@ export default function SignInScreen() {
           ) : null}
 
           {mode === 'create' && confirmPassword.length > 0 && confirmPassword !== password ? (
-            <ThemedView type="backgroundSelected" style={styles.card}>
-              <ThemedText type="smallBold">Password mismatch</ThemedText>
-              <ThemedText>Your password and confirmation need to match before creating the account.</ThemedText>
-            </ThemedView>
+            <View style={styles.errorCard}>
+              <ThemedText type="smallBold" style={styles.errorTitle}>Password mismatch</ThemedText>
+              <ThemedText style={styles.errorBody}>Your password and confirmation need to match before creating the account.</ThemedText>
+            </View>
           ) : null}
 
           {lastError ? (
-            <Pressable onPress={clearError}>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Dismiss account error"
+              accessibilityHint="Clears the current account error message."
+              onPress={clearError}>
               {({ pressed }) => (
-                <ThemedView type="backgroundSelected" style={[styles.button, pressed && styles.pressed]}>
-                  <ThemedText type="smallBold">Account error</ThemedText>
-                  <ThemedText>{lastError}</ThemedText>
-                </ThemedView>
+                <View style={[styles.errorCard, pressed && styles.pressed]}>
+                  <ThemedText type="smallBold" style={styles.errorTitle}>Account error</ThemedText>
+                  <ThemedText style={styles.errorBody}>{lastError}</ThemedText>
+                </View>
               )}
             </Pressable>
           ) : null}
 
-          <Pressable onPress={submit}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={mode === 'create' ? 'Create account' : 'Sign in'}
+            accessibilityState={{ disabled: isAuthenticating }}
+            onPress={submit}>
             {({ pressed }) => (
-              <ThemedView type="backgroundSelected" style={[styles.primaryButton, pressed && styles.pressed]}>
-                <ThemedText type="smallBold" style={styles.primaryButtonTitle}>
+              <View style={[styles.primaryButton, pressed && styles.pressed]}>
+                <ThemedText type="smallBold" style={[styles.primaryButtonTitle, styles.primaryButtonText]}>
                   {isAuthenticating
                     ? mode === 'create'
                       ? 'Creating account...'
@@ -242,25 +310,28 @@ export default function SignInScreen() {
                       ? 'Create account'
                       : 'Sign in'}
                 </ThemedText>
-                <ThemedText style={styles.primaryButtonBody}>
+                <ThemedText style={[styles.primaryButtonBody, styles.primaryButtonText]}>
                   {mode === 'create'
                     ? 'Save your readings and keep your account synced across devices.'
                     : 'Open your saved readings and continue where you left off.'}
                 </ThemedText>
-              </ThemedView>
+              </View>
             )}
           </Pressable>
 
-          <Pressable onPress={handleBack}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Back"
+            onPress={handleBack}>
             {({ pressed }) => (
-              <ThemedView type="backgroundElement" style={[styles.button, pressed && styles.pressed]}>
-                <ThemedText type="smallBold">Back</ThemedText>
-                <ThemedText>
+              <View style={[styles.secondaryButton, pressed && styles.pressed]}>
+                <ThemedText type="smallBold" style={styles.secondaryButtonTitle}>Back</ThemedText>
+                <ThemedText style={styles.secondaryButtonBody}>
                   {source === 'onboarding'
                     ? 'Return to the onboarding overview.'
                     : 'Return to the meter selection screen.'}
                 </ThemedText>
-              </ThemedView>
+              </View>
             )}
           </Pressable>
         </ScrollView>
@@ -340,15 +411,46 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.two,
     borderRadius: 18,
     alignItems: 'center',
+    borderWidth: 1,
+  },
+  modeChipActive: {
+    backgroundColor: accentBlue,
+    borderColor: accentBlue,
+    shadowColor: accentBlue,
+    shadowOpacity: 0.18,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 4 },
+  },
+  modeChipInactive: {
+    backgroundColor: '#FFFFFF',
+    borderColor: borderBlue,
+  },
+  modeChipTextActive: {
+    color: '#FFFFFF',
+  },
+  modeChipTextInactive: {
+    color: inkBlue,
   },
   card: {
     padding: Spacing.three,
     borderRadius: 22,
     gap: Spacing.one,
+    backgroundColor: accentBlue,
+    borderWidth: 1,
+    borderColor: accentBlue,
   },
   cardIntro: {
     gap: 4,
     marginBottom: Spacing.one,
+  },
+  formTitle: {
+    color: '#FFFFFF',
+  },
+  formBody: {
+    color: '#EAF1FF',
+  },
+  formLabel: {
+    color: '#FFFFFF',
   },
   fieldLabel: {
     marginTop: Spacing.two,
@@ -378,15 +480,35 @@ const styles = StyleSheet.create({
     minWidth: 68,
     flex: 1,
     borderRadius: 16,
-    backgroundColor: '#E8EDF8',
+    backgroundColor: accentBlueSoft,
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: Spacing.two,
   },
-  button: {
+  passwordToggleText: {
+    color: accentBlue,
+  },
+  resetPasswordButton: {
+    alignSelf: 'flex-start',
+    marginTop: Spacing.one,
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    borderRadius: 999,
+    backgroundColor: '#FFFFFF',
+  },
+  resetPasswordText: {
+    color: accentBlue,
+  },
+  disabledButton: {
+    opacity: 0.6,
+  },
+  errorCard: {
     padding: Spacing.three,
     borderRadius: 22,
     gap: Spacing.one,
+    backgroundColor: errorTint,
+    borderWidth: 1,
+    borderColor: errorBorder,
   },
   primaryButton: {
     paddingVertical: Spacing.three,
@@ -394,6 +516,11 @@ const styles = StyleSheet.create({
     borderRadius: 22,
     gap: 4,
     alignItems: 'center',
+    backgroundColor: accentBlue,
+    shadowColor: accentBlue,
+    shadowOpacity: 0.22,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 8 },
   },
   primaryButtonTitle: {
     textAlign: 'center',
@@ -401,14 +528,38 @@ const styles = StyleSheet.create({
   primaryButtonBody: {
     textAlign: 'center',
   },
+  primaryButtonText: {
+    color: '#FFFFFF',
+  },
   inlineButton: {
     marginTop: Spacing.two,
     paddingVertical: Spacing.two,
     paddingHorizontal: Spacing.two,
     borderRadius: 16,
     alignItems: 'center',
+    backgroundColor: accentBlue,
   },
   pressed: {
     opacity: 0.82,
+  },
+  secondaryButton: {
+    padding: Spacing.three,
+    borderRadius: 22,
+    gap: Spacing.one,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: borderBlue,
+  },
+  secondaryButtonTitle: {
+    color: inkBlue,
+  },
+  secondaryButtonBody: {
+    color: '#405071',
+  },
+  errorTitle: {
+    color: errorText,
+  },
+  errorBody: {
+    color: '#5F2626',
   },
 });

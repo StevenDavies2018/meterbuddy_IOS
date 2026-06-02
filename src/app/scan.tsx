@@ -38,11 +38,12 @@ export default function ScanScreen() {
     lastError,
     clearError,
     setSelectedMeterType,
+    hasProAccess,
   } = useAppFlow();
   const meter = getMeterOption(selectedMeterType);
   const previousReading = getLatestReadingByType(readings, meter.type);
   const accent = meterAccent[meter.type];
-  const hasPriorityProcessing = false;
+  const hasPriorityProcessing = hasProAccess;
   const queuedCaptureRef = useRef<{
     meterType: typeof meter.type;
     imageUri: string;
@@ -132,7 +133,7 @@ export default function ScanScreen() {
                 <View style={styles.heroCopy}>
                   <ThemedText style={styles.title}>Scan Meter</ThemedText>
                   <ThemedText themeColor="textSecondary" style={styles.subtitle}>
-                    Pick the utility you are scanning, then capture a clean photo of the current readout.
+                    Pick which utility you are scanning, then capture a clean photo of the current readout.
                   </ThemedText>
                 </View>
                 <Image source={logoImage} style={styles.logo} contentFit="contain" />
@@ -145,7 +146,13 @@ export default function ScanScreen() {
                 const optionAccent = meterAccent[option.type];
 
                 return (
-                  <Pressable key={option.type} onPress={() => setSelectedMeterType(option.type)} style={styles.selectorPressable}>
+                  <Pressable
+                    key={option.type}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Select ${option.label}`}
+                    accessibilityState={{ selected }}
+                    onPress={() => setSelectedMeterType(option.type)}
+                    style={styles.selectorPressable}>
                     {({ pressed }) => (
                       <View
                         style={[
@@ -210,7 +217,11 @@ export default function ScanScreen() {
             </View>
 
             {lastError ? (
-              <Pressable onPress={clearError}>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Dismiss last error"
+                accessibilityHint="Clears the current error message."
+                onPress={clearError}>
                 {({ pressed }) => (
                   <View style={[styles.errorCard, pressed && styles.pressed]}>
                     <ThemedText style={styles.errorTitle}>Last error</ThemedText>
@@ -222,9 +233,9 @@ export default function ScanScreen() {
 
             {hasQueuedCapture ? (
               <View style={styles.processingCard}>
-                <ThemedText style={styles.processingTitle}>Processing...</ThemedText>
+                <ThemedText style={styles.processingTitle}>Standard processing queue</ThemedText>
                 <ThemedText style={styles.processingBody}>
-                  Upgrade to Pro for the Priority Processing Cue.
+                  Priority processing is not enabled on this account, so this scan is in the standard processing queue.
                 </ThemedText>
                 <View style={styles.processingTimerBadge}>
                   <ThemedText style={styles.processingTimerText}>{processingCountdown}s</ThemedText>
@@ -232,7 +243,15 @@ export default function ScanScreen() {
               </View>
             ) : null}
 
-            <Pressable onPress={launchCamera} disabled={isAnalyzingCapture || hasQueuedCapture}>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={
+                hasQueuedCapture ? 'Scan queued for processing' : isAnalyzingCapture ? 'Reading meter' : `Take picture of ${meter.label}`
+              }
+              accessibilityHint="Opens the device camera to capture a meter reading."
+              accessibilityState={{ disabled: isAnalyzingCapture || hasQueuedCapture }}
+              onPress={launchCamera}
+              disabled={isAnalyzingCapture || hasQueuedCapture}>
               {({ pressed }) => (
                 <View
                   style={[
@@ -247,7 +266,7 @@ export default function ScanScreen() {
                   </ThemedText>
                   <ThemedText style={styles.captureButtonBody}>
                     {hasQueuedCapture
-                      ? 'Your photo is in the standard processing line. We will open the confirm screen as soon as the timer finishes.'
+                      ? 'Your scan is in the standard processing queue. The confirm screen will open automatically.'
                       : isAnalyzingCapture
                       ? 'Sending the captured photo to AI so the confirm screen opens with a suggested reading.'
                       : 'Open the device camera and capture a real image for AI reading and Supabase upload.'}

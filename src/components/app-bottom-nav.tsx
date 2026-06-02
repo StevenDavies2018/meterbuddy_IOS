@@ -30,6 +30,9 @@ export function AppBottomNav({ active }: AppBottomNavProps) {
         return (
           <Pressable
             key={item.key}
+            accessibilityRole="tab"
+            accessibilityLabel={item.label}
+            accessibilityState={{ selected }}
             onPress={() => router.replace(item.href as never)}
             style={styles.itemPressable}>
             {({ pressed }) => (

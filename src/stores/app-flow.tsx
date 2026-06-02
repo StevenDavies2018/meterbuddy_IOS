@@ -1,6 +1,8 @@
 import { createContext, ReactNode, startTransition, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Platform } from 'react-native';
+import Purchases, { CustomerInfo, LOG_LEVEL } from 'react-native-purchases';
+import RevenueCatUI from 'react-native-purchases-ui';
 
 import { supabase } from '@/lib/supabase';
 import { getMeterOption } from '@/models/meter-data';
@@ -11,11 +13,22 @@ import {
   extractMeterReading,
   fetchMeterRecords,
   requestAccountDeletion,
+  requestPasswordReset,
   saveConfirmedReading,
   signInWithPassword,
   signOut,
   uploadMeterImage,
 } from '@/lib/meter-service';
+
+const REVENUECAT_PAYWALL_ENTITLEMENT = 'meterbuddy Pro';
+const REVENUECAT_PRO_ENTITLEMENT = 'meterbuddy_pro';
+const REVENUECAT_LEGACY_PRO_ENTITLEMENT = 'lifetime_unlock';
+const REVENUECAT_PRO_ENTITLEMENTS = [
+  REVENUECAT_PAYWALL_ENTITLEMENT,
+  REVENUECAT_PRO_ENTITLEMENT,
+  REVENUECAT_LEGACY_PRO_ENTITLEMENT,
+] as const;
+const revenueCatAppleApiKey = process.env.EXPO_PUBLIC_REVENUECAT_APPLE_API_KEY;
 
 type AppFlowContextValue = {
   selectedMeterType: MeterType;
@@ -28,10 +41,11 @@ type AppFlowContextValue = {
   isAnalyzingCapture: boolean;
   isAuthenticating: boolean;
   hasCompletedOnboarding: boolean;
-  hasCompletedFirstScanPrompt: boolean;
   authUserId: string | null;
   authEmail: string | null;
   isAuthenticated: boolean;
+  purchasesReady: boolean;
+  hasProAccess: boolean;
   lastError: string | null;
   authNotice: string | null;
   setSelectedMeterType: (meterType: MeterType) => void;
@@ -44,19 +58,21 @@ type AppFlowContextValue = {
   }) => Promise<void>;
   clearError: () => void;
   completeOnboarding: () => void;
-  markFirstScanPromptComplete: () => void;
   createAccountWithPassword: (email: string, password: string) => Promise<void>;
   loginWithPassword: (email: string, password: string) => Promise<void>;
+  sendPasswordReset: (email: string) => Promise<void>;
   logout: () => Promise<void>;
   deleteAccount: () => Promise<void>;
   confirmDraftReading: (confirmedValue?: string) => Promise<void>;
+  showProPaywall: () => Promise<boolean>;
+  restorePurchases: () => Promise<void>;
+  openCustomerCenter: () => Promise<void>;
 };
 
 const AppFlowContext = createContext<AppFlowContextValue | null>(null);
 
 export function AppFlowProvider({ children }: { children: ReactNode }) {
   const onboardingStorageKey = 'meterbuddy.onboardingCompleted';
-  const firstScanPromptStorageKey = 'meterbuddy.firstScanPromptCompleted';
   const isWeb = Platform.OS === 'web';
   const [selectedMeterType, setSelectedMeterType] = useState<MeterType>('gas');
   const [readings, setReadings] = useState<ReadingRecord[]>([]);
@@ -68,28 +84,113 @@ export function AppFlowProvider({ children }: { children: ReactNode }) {
   const [isAnalyzingCapture, setIsAnalyzingCapture] = useState(false);
   const [isAuthenticating, setIsAuthenticating] = useState(false);
   const [hasCompletedOnboarding, setHasCompletedOnboarding] = useState(false);
-  const [hasCompletedFirstScanPrompt, setHasCompletedFirstScanPrompt] = useState(false);
   const [authUserId, setAuthUserId] = useState<string | null>(null);
   const [authEmail, setAuthEmail] = useState<string | null>(null);
+  const [purchasesReady, setPurchasesReady] = useState(false);
+  const [hasProAccess, setHasProAccess] = useState(false);
   const [lastError, setLastError] = useState<string | null>(null);
   const [authNotice, setAuthNotice] = useState<string | null>(null);
   const captureUploadPayloadRef = useRef<{ imageBase64?: string; mimeType?: string | null } | null>(null);
+
+  useEffect(() => {
+    if (Platform.OS !== 'ios') {
+      return;
+    }
+
+    if (!revenueCatAppleApiKey) {
+      setPurchasesReady(false);
+      setHasProAccess(false);
+      return;
+    }
+
+    const revenueCatApiKey: string = revenueCatAppleApiKey;
+
+    Purchases.setLogLevel(LOG_LEVEL.VERBOSE);
+
+    let listenerActive = true;
+    const customerInfoListener = (customerInfo: CustomerInfo) => {
+      if (!listenerActive) return;
+      setHasProAccess(hasRevenueCatProAccess(customerInfo));
+    };
+
+    async function configureRevenueCat() {
+      try {
+        const configured = await Purchases.isConfigured();
+
+        if (!configured) {
+          Purchases.configure({
+            apiKey: revenueCatApiKey,
+          });
+        }
+
+        Purchases.addCustomerInfoUpdateListener(customerInfoListener);
+        const customerInfo = await Purchases.getCustomerInfo();
+
+        if (!listenerActive) return;
+
+        setPurchasesReady(true);
+        setHasProAccess(hasRevenueCatProAccess(customerInfo));
+      } catch (error) {
+        if (!listenerActive) return;
+        console.error('RevenueCat configuration failed', error);
+        setPurchasesReady(false);
+        setHasProAccess(false);
+      }
+    }
+
+    void configureRevenueCat();
+
+    return () => {
+      listenerActive = false;
+      Purchases.removeCustomerInfoUpdateListener(customerInfoListener);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (Platform.OS !== 'ios' || !revenueCatAppleApiKey || !purchasesReady) {
+      return;
+    }
+
+    let cancelled = false;
+
+    async function syncRevenueCatIdentity() {
+      try {
+        if (authUserId) {
+          const { customerInfo } = await Purchases.logIn(authUserId);
+          if (!cancelled) {
+            setHasProAccess(hasRevenueCatProAccess(customerInfo));
+          }
+          return;
+        }
+
+        const customerInfo = await Purchases.logOut();
+        if (!cancelled) {
+          setHasProAccess(hasRevenueCatProAccess(customerInfo));
+        }
+      } catch (error) {
+        if (cancelled) return;
+        console.error('RevenueCat identity sync failed', error);
+      }
+    }
+
+    void syncRevenueCatIdentity();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [authUserId, purchasesReady]);
 
   useEffect(() => {
     let cancelled = false;
 
     async function syncSessionState() {
       try {
-        const [onboardingFlag, firstScanPromptFlag] = await Promise.all([
-          readPersistentFlag(onboardingStorageKey, isWeb),
-          readPersistentFlag(firstScanPromptStorageKey, isWeb),
-        ]);
+        const onboardingFlag = await readPersistentFlag(onboardingStorageKey, isWeb);
 
         if (cancelled) return;
 
         startTransition(() => {
           setHasCompletedOnboarding(onboardingFlag === 'true');
-          setHasCompletedFirstScanPrompt(firstScanPromptFlag === 'true');
         });
 
         const session = await ensureAnonymousSession();
@@ -116,9 +217,9 @@ export function AppFlowProvider({ children }: { children: ReactNode }) {
         startTransition(() => {
           setAuthUserId(session.user.id);
           setAuthEmail(session.user.email ?? null);
-          setReadings(remote.readings);
-          setResults(remote.results);
-          setReminders(remote.reminders);
+          setReadings(dedupeReadings(remote.readings));
+          setResults(dedupeResults(remote.results));
+          setReminders(dedupeReminders(remote.reminders));
           setLastError(null);
         });
       } catch (error) {
@@ -156,9 +257,9 @@ export function AppFlowProvider({ children }: { children: ReactNode }) {
         .then((remote) => {
           if (cancelled) return;
           startTransition(() => {
-            setReadings(remote.readings);
-            setResults(remote.results);
-            setReminders(remote.reminders);
+            setReadings(dedupeReadings(remote.readings));
+            setResults(dedupeResults(remote.results));
+            setReminders(dedupeReminders(remote.reminders));
           });
         })
         .catch((error) => {
@@ -171,7 +272,7 @@ export function AppFlowProvider({ children }: { children: ReactNode }) {
       cancelled = true;
       subscription.unsubscribe();
     };
-  }, [firstScanPromptStorageKey, isWeb, onboardingStorageKey]);
+  }, [isWeb, onboardingStorageKey]);
 
   async function beginCaptureDraft(draft: {
     meterType: MeterType;
@@ -247,11 +348,6 @@ export function AppFlowProvider({ children }: { children: ReactNode }) {
     setHasCompletedOnboarding(true);
   }
 
-  function markFirstScanPromptComplete() {
-    void writePersistentFlag(firstScanPromptStorageKey, 'true', isWeb);
-    setHasCompletedFirstScanPrompt(true);
-  }
-
   async function createAccountWithPassword(email: string, password: string) {
     setIsAuthenticating(true);
     setLastError(null);
@@ -265,9 +361,9 @@ export function AppFlowProvider({ children }: { children: ReactNode }) {
         startTransition(() => {
           setAuthUserId(response.session?.user?.id ?? null);
           setAuthEmail(response.session?.user?.email ?? null);
-          setReadings(remote.readings);
-          setResults(remote.results);
-          setReminders(remote.reminders);
+          setReadings(dedupeReadings(remote.readings));
+          setResults(dedupeResults(remote.results));
+          setReminders(dedupeReminders(remote.reminders));
           setAuthNotice('Account created. You are now signed in.');
         });
         return;
@@ -295,13 +391,37 @@ export function AppFlowProvider({ children }: { children: ReactNode }) {
       startTransition(() => {
         setAuthUserId(session?.user?.id ?? null);
         setAuthEmail(session?.user?.email ?? null);
-        setReadings(remote.readings);
-        setResults(remote.results);
-        setReminders(remote.reminders);
+        setReadings(dedupeReadings(remote.readings));
+        setResults(dedupeResults(remote.results));
+        setReminders(dedupeReminders(remote.reminders));
         setAuthNotice(null);
       });
     } catch (error) {
       setLastError(error instanceof Error ? error.message : 'Failed to sign in.');
+      throw error;
+    } finally {
+      setIsAuthenticating(false);
+    }
+  }
+
+  async function sendPasswordReset(email: string) {
+    const normalizedEmail = email.trim().toLowerCase();
+
+    if (!normalizedEmail) {
+      const error = new Error('Enter your email address before requesting a password reset.');
+      setLastError(error.message);
+      throw error;
+    }
+
+    setIsAuthenticating(true);
+    setLastError(null);
+    setAuthNotice(null);
+
+    try {
+      await requestPasswordReset(normalizedEmail);
+      setAuthNotice('Password reset email sent. Check your inbox for the reset link.');
+    } catch (error) {
+      setLastError(error instanceof Error ? error.message : 'Failed to send password reset email.');
       throw error;
     } finally {
       setIsAuthenticating(false);
@@ -382,9 +502,13 @@ export function AppFlowProvider({ children }: { children: ReactNode }) {
 
       startTransition(() => {
         captureUploadPayloadRef.current = null;
-        setReadings((current) => [saved.reading, ...current]);
-        setResults((current) => [saved.result, ...current.filter((item) => item.meterType !== saved.result.meterType)]);
-        setReminders((current) => [saved.reminder, ...current.filter((item) => item.meterType !== saved.reminder.meterType)]);
+        setReadings((current) => dedupeReadings([saved.reading, ...current]));
+        setResults((current) =>
+          dedupeResults([saved.result, ...current.filter((item) => item.meterType !== saved.result.meterType)])
+        );
+        setReminders((current) =>
+          dedupeReminders([saved.reminder, ...current.filter((item) => item.meterType !== saved.reminder.meterType)])
+        );
         setCaptureDraft(null);
       });
     } catch (error) {
@@ -393,6 +517,40 @@ export function AppFlowProvider({ children }: { children: ReactNode }) {
     } finally {
       setIsSaving(false);
     }
+  }
+
+  async function showProPaywall() {
+    if (Platform.OS !== 'ios' || !revenueCatAppleApiKey) {
+      throw new Error('RevenueCat is not configured for this build.');
+    }
+
+    const paywallResult = await RevenueCatUI.presentPaywallIfNeeded({
+      requiredEntitlementIdentifier: REVENUECAT_PAYWALL_ENTITLEMENT,
+      displayCloseButton: true,
+    });
+
+    const customerInfo = await Purchases.getCustomerInfo();
+    const entitlementActive = hasRevenueCatProAccess(customerInfo);
+    setHasProAccess(entitlementActive);
+
+    return entitlementActive || paywallResult === 'PURCHASED' || paywallResult === 'RESTORED';
+  }
+
+  async function restorePurchases() {
+    if (Platform.OS !== 'ios' || !revenueCatAppleApiKey) {
+      throw new Error('RevenueCat is not configured for this build.');
+    }
+
+    const customerInfo = await Purchases.restorePurchases();
+    setHasProAccess(hasRevenueCatProAccess(customerInfo));
+  }
+
+  async function openCustomerCenter() {
+    if (Platform.OS !== 'ios' || !revenueCatAppleApiKey) {
+      throw new Error('RevenueCat is not configured for this build.');
+    }
+
+    await RevenueCatUI.presentCustomerCenter();
   }
 
   const value = useMemo(
@@ -407,39 +565,45 @@ export function AppFlowProvider({ children }: { children: ReactNode }) {
       isAnalyzingCapture,
       isAuthenticating,
       hasCompletedOnboarding,
-      hasCompletedFirstScanPrompt,
       authUserId,
       authEmail,
       isAuthenticated: Boolean(authUserId),
+      purchasesReady,
+      hasProAccess,
       lastError,
       authNotice,
       setSelectedMeterType,
       beginCaptureDraft,
       clearError,
       completeOnboarding,
-      markFirstScanPromptComplete,
       createAccountWithPassword,
       loginWithPassword,
+      sendPasswordReset,
       logout,
       deleteAccount,
       confirmDraftReading,
+      showProPaywall,
+      restorePurchases,
+      openCustomerCenter,
     }),
     [
       authEmail,
       authNotice,
       authUserId,
       captureDraft,
+      hasProAccess,
       hasCompletedOnboarding,
-      hasCompletedFirstScanPrompt,
       isAuthenticating,
       isBootstrapping,
       isSaving,
       isAnalyzingCapture,
       lastError,
+      purchasesReady,
       readings,
       reminders,
       results,
       selectedMeterType,
+      sendPasswordReset,
     ]
   );
 
@@ -477,4 +641,54 @@ async function writePersistentFlag(key: string, value: string, isWeb: boolean) {
   }
 
   await AsyncStorage.setItem(key, value);
+}
+
+function hasRevenueCatProAccess(customerInfo: CustomerInfo) {
+  return REVENUECAT_PRO_ENTITLEMENTS.some((entitlementKey) => hasRevenueCatEntitlement(customerInfo, entitlementKey));
+}
+
+function hasRevenueCatEntitlement(customerInfo: CustomerInfo, entitlementKey: string) {
+  return typeof customerInfo.entitlements.active[entitlementKey] !== 'undefined';
+}
+
+function dedupeReadings(items: ReadingRecord[]) {
+  const uniqueById = new Map<string, ReadingRecord>();
+
+  for (const item of items) {
+    if (!uniqueById.has(item.id)) {
+      uniqueById.set(item.id, item);
+    }
+  }
+
+  return Array.from(uniqueById.values()).sort(
+    (left, right) => new Date(right.capturedAt).getTime() - new Date(left.capturedAt).getTime()
+  );
+}
+
+function dedupeResults(items: ResultRecord[]) {
+  const uniqueById = new Map<string, ResultRecord>();
+
+  for (const item of items) {
+    if (!uniqueById.has(item.id)) {
+      uniqueById.set(item.id, item);
+    }
+  }
+
+  return Array.from(uniqueById.values()).sort(
+    (left, right) => new Date(right.calculatedAt).getTime() - new Date(left.calculatedAt).getTime()
+  );
+}
+
+function dedupeReminders(items: ReminderRecord[]) {
+  const uniqueByMeter = new Map<MeterType, ReminderRecord>();
+
+  for (const item of items) {
+    if (!uniqueByMeter.has(item.meterType)) {
+      uniqueByMeter.set(item.meterType, item);
+    }
+  }
+
+  return Array.from(uniqueByMeter.values()).sort(
+    (left, right) => new Date(left.nextDueAt).getTime() - new Date(right.nextDueAt).getTime()
+  );
 }

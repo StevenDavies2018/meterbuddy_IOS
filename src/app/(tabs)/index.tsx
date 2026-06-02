@@ -82,12 +82,16 @@ export default function DashboardScreen() {
             <Image source={logoImage} style={styles.logo} contentFit="contain" />
           </View>
 
-          <Pressable onPress={pickPrimaryMeter}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Scan reading"
+            accessibilityHint="Starts a meter scan using your most recent meter type, or gas if there are no readings yet."
+            onPress={pickPrimaryMeter}>
             {({ pressed }) => (
               <View style={[styles.scanHeroCard, pressed && styles.pressed]}>
                 <View style={styles.scanIconWrap}>
                   <View style={styles.scanIconCore}>
-                    <ThemedText style={styles.scanIconText}>◉</ThemedText>
+                    <ThemedText style={styles.scanIconText}>Scan</ThemedText>
                   </View>
                 </View>
                 <ThemedText style={styles.scanHeroTitle}>Scan Reading</ThemedText>
@@ -97,7 +101,11 @@ export default function DashboardScreen() {
           </Pressable>
 
           {!isAuthenticated && !isBootstrapping ? (
-            <Pressable onPress={() => router.push('/sign-in')}>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Create your account"
+              accessibilityHint="Opens the account sign-in and creation screen."
+              onPress={() => router.push('/sign-in')}>
               {({ pressed }) => (
                 <View style={[styles.accountPromptCard, pressed && styles.pressed]}>
                   <View style={styles.accountPromptCopy}>
@@ -113,7 +121,11 @@ export default function DashboardScreen() {
           ) : null}
 
           {lastError ? (
-            <Pressable onPress={clearError}>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Dismiss dashboard error"
+              accessibilityHint="Clears the current dashboard error message."
+              onPress={clearError}>
               {({ pressed }) => (
                 <View style={[styles.errorCard, pressed && styles.pressed]}>
                   <ThemedText style={styles.errorTitle}>Something needs attention</ThemedText>
@@ -152,18 +164,14 @@ export default function DashboardScreen() {
                       {reading ? reading.confirmedValue : '--'}
                     </ThemedText>
                     <ThemedText themeColor="textSecondary" style={styles.statusCardUnits}>
-                      {reading ? `${reading.units} • ${formatReminderDate(reminder?.nextDueAt)}` : 'No reading saved yet'}
+                      {reading ? `${reading.units} - ${formatReminderDate(reminder?.nextDueAt)}` : 'No reading saved yet'}
                     </ThemedText>
 
                     <View style={styles.statusThumbWrap}>
                       {reading ? (
-                        isDisplayableImageUri(reading.imageUri) ? (
-                          <Image source={{ uri: reading.imageUri }} style={styles.statusThumb} contentFit="cover" />
-                        ) : (
-                          <View style={styles.statusThumbPlaceholder}>
-                            <ThemedText style={styles.statusThumbPlaceholderText}>Photo saved</ThemedText>
-                          </View>
-                        )
+                        <View style={styles.statusThumbPlaceholder}>
+                          <ThemedText style={styles.statusThumbPlaceholderText}>Photo saved</ThemedText>
+                        </View>
                       ) : (
                         <View style={styles.statusThumbPlaceholder}>
                           <ThemedText style={styles.statusThumbPlaceholderText}>No photo yet</ThemedText>
@@ -185,13 +193,9 @@ export default function DashboardScreen() {
               recentReadings.map((reading) => (
                 <View key={reading.id} style={styles.activityCard}>
                   <View style={styles.activityThumbWrap}>
-                    {isDisplayableImageUri(reading.imageUri) ? (
-                      <Image source={{ uri: reading.imageUri }} style={styles.activityThumb} contentFit="cover" />
-                    ) : (
-                      <View style={styles.activityThumbFallback}>
-                        <ThemedText style={styles.activityThumbFallbackText}>Saved</ThemedText>
-                      </View>
-                    )}
+                    <View style={styles.activityThumbFallback}>
+                      <ThemedText style={styles.activityThumbFallbackText}>Saved</ThemedText>
+                    </View>
                   </View>
 
                   <View style={styles.activityCopy}>
@@ -204,7 +208,6 @@ export default function DashboardScreen() {
                     </ThemedText>
                   </View>
 
-                  <ThemedText style={styles.activityChevron}>›</ThemedText>
                 </View>
               ))
             ) : (
@@ -227,11 +230,6 @@ export default function DashboardScreen() {
       </SafeAreaView>
     </Screen>
   );
-}
-
-function isDisplayableImageUri(value?: string | null) {
-  if (!value) return false;
-  return /^(file|content|https?|data):/i.test(value);
 }
 
 function formatMeterName(type: MeterType) {
@@ -466,10 +464,6 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFFFFF',
     height: 72,
   },
-  statusThumb: {
-    width: '100%',
-    height: '100%',
-  },
   statusThumbPlaceholder: {
     flex: 1,
     justifyContent: 'center',
@@ -503,10 +497,6 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     backgroundColor: '#E9EEF9',
   },
-  activityThumb: {
-    width: '100%',
-    height: '100%',
-  },
   activityThumbFallback: {
     flex: 1,
     justifyContent: 'center',
@@ -532,12 +522,6 @@ const styles = StyleSheet.create({
   activityMeta: {
     fontSize: 12,
     lineHeight: 16,
-  },
-  activityChevron: {
-    color: '#9CA7C2',
-    fontSize: 24,
-    lineHeight: 24,
-    fontWeight: '700',
   },
   emptyActivityCard: {
     padding: 18,

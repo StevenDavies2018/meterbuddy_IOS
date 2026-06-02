@@ -55,6 +55,14 @@ export async function signInWithPassword(email: string, password: string) {
   }
 }
 
+export async function requestPasswordReset(email: string) {
+  const { error } = await supabase.auth.resetPasswordForEmail(email);
+
+  if (error) {
+    throw error;
+  }
+}
+
 export async function signOut() {
   const { error } = await supabase.auth.signOut();
   if (error) {
@@ -235,6 +243,12 @@ export async function saveConfirmedReading(params: {
   }
 
   const previousReading = previousRows?.[0];
+  const previousConfirmedValue = normalizeSavedReadingValue(previousReading?.confirmed_value);
+  const nextConfirmedValue = normalizeSavedReadingValue(params.confirmedValue);
+
+  if (previousConfirmedValue !== null && nextConfirmedValue !== null && nextConfirmedValue <= previousConfirmedValue) {
+    throw new Error('This reading must be greater than the last saved reading for this meter.');
+  }
 
   const { data: readingRow, error: readingError } = await supabase
     .from('readings')
@@ -371,6 +385,15 @@ function mimeTypeFromExtension(extension: string) {
 function normalizeReadingValue(value: string | null) {
   if (!value) return '';
   return value.replace(/\s+/g, '').trim();
+}
+
+function normalizeSavedReadingValue(value: string | null | undefined) {
+  if (!value) return null;
+
+  const normalized = value.replace(/,/g, '').trim();
+  const parsed = Number(normalized);
+
+  return Number.isFinite(parsed) ? parsed : null;
 }
 
 function resolveBestReadingValue(parsed: {

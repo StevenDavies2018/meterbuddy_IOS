@@ -1,33 +1,22 @@
-import { Tabs } from 'expo-router';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { Tabs, usePathname } from 'expo-router';
+
+import { AppBottomNav } from '@/components/app-bottom-nav';
+
+type ActiveTab = 'dashboard' | 'account' | 'settings';
 
 export default function TabsLayout() {
-  const insets = useSafeAreaInsets();
-  const bottomInset = Math.max(insets.bottom, 14);
+  const pathname = usePathname();
+  const activeTab: ActiveTab = pathname.includes('/settings')
+    ? 'settings'
+    : pathname.includes('/account')
+      ? 'account'
+      : 'dashboard';
 
   return (
     <Tabs
+      tabBar={() => <AppBottomNav active={activeTab} />}
       screenOptions={{
         headerShown: false,
-        tabBarActiveTintColor: '#1756D1',
-        tabBarInactiveTintColor: '#7C859D',
-        tabBarIcon: () => null,
-        tabBarStyle: {
-          height: 64 + bottomInset,
-          paddingTop: 8,
-          paddingBottom: bottomInset,
-          paddingHorizontal: 8,
-          borderTopWidth: 1,
-          borderTopColor: '#E3E8F4',
-          backgroundColor: '#FFFFFF',
-        },
-        tabBarLabelStyle: {
-          fontSize: 12,
-          fontWeight: '700',
-        },
-        tabBarItemStyle: {
-          paddingTop: 2,
-        },
       }}>
       <Tabs.Screen
         name="index"

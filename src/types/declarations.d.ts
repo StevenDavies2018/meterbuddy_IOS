@@ -10,5 +10,6 @@ declare const process: {
     EXPO_OS?: string;
     EXPO_PUBLIC_SUPABASE_URL?: string;
     EXPO_PUBLIC_SUPABASE_ANON_KEY?: string;
+    EXPO_PUBLIC_REVENUECAT_APPLE_API_KEY?: string;
   };
 };

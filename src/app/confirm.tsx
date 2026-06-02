@@ -1,6 +1,6 @@
 import { useRouter } from 'expo-router';
 import { Image } from 'expo-image';
-import { Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
+import { Alert, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useEffect, useState } from 'react';
 
@@ -12,6 +12,10 @@ import { BottomTabInset, Spacing } from '@/constants/theme';
 import { getMeterOption } from '@/models/meter-data';
 import { useAppFlow } from '@/stores/app-flow';
 
+const accentBlue = '#1756D1';
+const accentBlueSoft = '#EAF1FF';
+const inkBlue = '#081F5C';
+
 export default function ConfirmScreen() {
   const router = useRouter();
   const { selectedMeterType, captureDraft, confirmDraftReading, isSaving, lastError, clearError } = useAppFlow();
@@ -22,10 +26,23 @@ export default function ConfirmScreen() {
     setConfirmedValue(captureDraft?.aiReadingValue ?? '');
   }, [captureDraft?.aiReadingValue]);
 
+  useEffect(() => {
+    if (!lastError) {
+      return;
+    }
+
+    Alert.alert('Save error', lastError, [
+      {
+        text: 'OK',
+        onPress: clearError,
+      },
+    ]);
+  }, [clearError, lastError]);
+
   async function saveReading() {
     try {
       await confirmDraftReading(confirmedValue);
-      router.replace('/results');
+      router.replace('/(tabs)');
     } catch {
       // Error state is surfaced from the shared store.
     }
@@ -81,6 +98,8 @@ export default function ConfirmScreen() {
                 <ThemedView type="backgroundElement" style={styles.card}>
                   <ThemedText type="smallBold">Confirmed reading</ThemedText>
                   <TextInput
+                    accessibilityLabel="Confirmed meter reading"
+                    accessibilityHint="Enter the reading value that should be saved."
                     value={confirmedValue}
                     onChangeText={setConfirmedValue}
                     keyboardType="numeric"
@@ -93,44 +112,41 @@ export default function ConfirmScreen() {
                   </ThemedText>
                 </ThemedView>
 
-                {lastError ? (
-                  <Pressable onPress={clearError}>
-                    {({ pressed }) => (
-                      <ThemedView type="backgroundElement" style={[styles.card, pressed && styles.pressed]}>
-                        <ThemedText type="smallBold">Save error</ThemedText>
-                        <ThemedText>{lastError}</ThemedText>
-                      </ThemedView>
-                    )}
-                  </Pressable>
-                ) : null}
               </>
             ) : null}
           </ScrollView>
 
           <View style={styles.bottomArea}>
             <View style={styles.bottomActions}>
-              <Pressable onPress={() => router.replace('/scan')} style={styles.bottomActionPressable}>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={isSaving ? 'Saving reading' : 'Confirm and save reading'}
+                accessibilityHint="Saves the confirmed meter reading and updates history."
+                accessibilityState={{ disabled: !captureDraft || isSaving }}
+                onPress={saveReading}
+                disabled={!captureDraft || isSaving}
+                style={styles.bottomActionPressable}>
                 {({ pressed }) => (
-                  <ThemedView type="backgroundElement" style={[styles.bottomActionCard, pressed && styles.pressed]}>
-                    <ThemedText type="smallBold">Back to scan</ThemedText>
-                    <ThemedText>Retake or scan a different meter.</ThemedText>
-                  </ThemedView>
+                  <View style={[styles.bottomActionCard, styles.primaryActionCard, pressed && styles.pressed, (!captureDraft || isSaving) && styles.disabled]}>
+                    <ThemedText type="smallBold" style={styles.primaryActionTitle}>
+                      {isSaving ? 'Saving...' : 'Confirm and save'}
+                    </ThemedText>
+                    <ThemedText style={styles.primaryActionBody}>Save this confirmed reading and update history.</ThemedText>
+                  </View>
                 )}
               </Pressable>
 
-              <Pressable onPress={saveReading} disabled={!captureDraft || isSaving} style={styles.bottomActionPressable}>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Back to scan"
+                accessibilityHint="Returns to the scan screen to retake the photo or choose another meter."
+                onPress={() => router.replace('/scan')}
+                style={styles.bottomActionPressable}>
                 {({ pressed }) => (
-                  <ThemedView
-                    type="backgroundSelected"
-                    style={[
-                      styles.bottomActionCard,
-                      styles.primaryActionCard,
-                      pressed && styles.pressed,
-                      (!captureDraft || isSaving) && styles.disabled,
-                    ]}>
-                    <ThemedText type="smallBold">{isSaving ? 'Saving...' : 'Confirm and save'}</ThemedText>
-                    <ThemedText>Save this confirmed reading and update history.</ThemedText>
-                  </ThemedView>
+                  <View style={[styles.bottomActionCard, styles.secondaryActionCard, pressed && styles.pressed]}>
+                    <ThemedText type="smallBold" style={styles.secondaryActionTitle}>Back to scan</ThemedText>
+                    <ThemedText style={styles.secondaryActionBody}>Retake or scan a different meter.</ThemedText>
+                  </View>
                 )}
               </Pressable>
             </View>
@@ -166,7 +182,9 @@ const styles = StyleSheet.create({
     gap: Spacing.one,
   },
   primaryActionCard: {
-    backgroundColor: '#E0E1E6',
+    backgroundColor: accentBlue,
+    borderWidth: 1,
+    borderColor: accentBlue,
   },
   bottomArea: {
     paddingHorizontal: Spacing.three,
@@ -174,17 +192,34 @@ const styles = StyleSheet.create({
     gap: Spacing.two,
   },
   bottomActions: {
-    flexDirection: 'row',
+    flexDirection: 'column',
     gap: Spacing.two,
   },
   bottomActionPressable: {
-    flex: 1,
+    width: '100%',
   },
   bottomActionCard: {
     padding: Spacing.three,
     borderRadius: 22,
     gap: Spacing.one,
     minHeight: 92,
+  },
+  secondaryActionCard: {
+    backgroundColor: accentBlueSoft,
+    borderWidth: 1,
+    borderColor: '#C8D9FF',
+  },
+  primaryActionTitle: {
+    color: '#FFFFFF',
+  },
+  primaryActionBody: {
+    color: '#EAF1FF',
+  },
+  secondaryActionTitle: {
+    color: inkBlue,
+  },
+  secondaryActionBody: {
+    color: '#405071',
   },
   input: {
     borderWidth: 1,

@@ -11,12 +11,10 @@ export default function TabLayout() {
       <AppFlowProvider>
         <Stack screenOptions={{ headerShown: false }}>
           <Stack.Screen name="onboarding" />
-          <Stack.Screen name="first-scan" />
           <Stack.Screen name="(tabs)" />
           <Stack.Screen name="sign-in" />
           <Stack.Screen name="scan" />
           <Stack.Screen name="confirm" />
-          <Stack.Screen name="results" />
         </Stack>
       </AppFlowProvider>
     </ThemeProvider>

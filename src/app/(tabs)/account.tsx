@@ -1,5 +1,6 @@
+import { useRouter } from 'expo-router';
 import { useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { Alert, Platform, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { Screen } from '@/components/screen';
@@ -8,8 +9,49 @@ import { BottomTabInset, Spacing } from '@/constants/theme';
 import { useAppFlow } from '@/stores/app-flow';
 
 export default function AccountScreen() {
-  const { authEmail, authUserId, isAuthenticated, logout, deleteAccount } = useAppFlow();
+  const router = useRouter();
+  const {
+    authEmail,
+    authUserId,
+    isAuthenticated,
+    logout,
+    deleteAccount,
+    hasProAccess,
+    purchasesReady,
+    showProPaywall,
+    restorePurchases,
+    openCustomerCenter,
+  } = useAppFlow();
   const [isDeleteArmed, setIsDeleteArmed] = useState(false);
+
+  async function handleUnlockPro() {
+    try {
+      const unlocked = await showProPaywall();
+
+      if (unlocked) {
+        Alert.alert('MeterBuddy Pro unlocked', 'Your Pro access is now active on this account.');
+      }
+    } catch (error) {
+      Alert.alert('Purchases unavailable', error instanceof Error ? error.message : 'RevenueCat is not ready yet.');
+    }
+  }
+
+  async function handleRestorePurchases() {
+    try {
+      await restorePurchases();
+      Alert.alert('Restore complete', 'Your App Store purchases have been refreshed for this account.');
+    } catch (error) {
+      Alert.alert('Restore failed', error instanceof Error ? error.message : 'Unable to restore purchases right now.');
+    }
+  }
+
+  async function handleOpenCustomerCenter() {
+    try {
+      await openCustomerCenter();
+    } catch (error) {
+      Alert.alert('Customer center unavailable', error instanceof Error ? error.message : 'RevenueCat is not ready yet.');
+    }
+  }
 
   return (
     <Screen>
@@ -18,7 +60,7 @@ export default function AccountScreen() {
           <View style={styles.hero}>
             <ThemedText style={styles.title}>Account</ThemedText>
             <ThemedText themeColor="textSecondary" style={styles.subtitle}>
-              Manage the account tied to your readings, reminders, and future lifetime unlock.
+              Manage the account tied to your readings, reminders, and MeterBuddy Pro access.
             </ThemedText>
           </View>
 
@@ -40,18 +82,80 @@ export default function AccountScreen() {
           </View>
 
           <View style={styles.card}>
-            <ThemedText style={styles.cardLabel}>Lifetime unlock</ThemedText>
-            <ThemedText style={styles.cardValue}>Not unlocked yet</ThemedText>
+            <ThemedText style={styles.cardLabel}>MeterBuddy Pro</ThemedText>
+            <ThemedText style={styles.cardValue}>{hasProAccess ? 'Unlocked' : 'Not unlocked yet'}</ThemedText>
             <ThemedText themeColor="textSecondary">
-              We’ll use this account to restore your one-time purchase across devices later.
+              {hasProAccess
+                ? 'This account has Pro access, including priority processing on supported flows.'
+                : 'Use this account to unlock MeterBuddy Pro and restore the purchase across devices.'}
             </ThemedText>
           </View>
+
+          {Platform.OS === 'ios' ? (
+            <>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={hasProAccess ? 'Manage MeterBuddy Pro' : 'Unlock MeterBuddy Pro'}
+                accessibilityHint="Opens purchase tools for MeterBuddy Pro."
+                accessibilityState={{ disabled: !purchasesReady }}
+                disabled={!purchasesReady}
+                onPress={() => void handleUnlockPro()}>
+                {({ pressed }) => (
+                  <View style={[styles.proCard, pressed && styles.pressed, !purchasesReady && styles.disabledCard]}>
+                      <ThemedText style={styles.proTitle}>{hasProAccess ? 'Manage MeterBuddy Pro' : 'Unlock MeterBuddy Pro'}</ThemedText>
+                      <ThemedText style={styles.proBody}>
+                        {hasProAccess
+                          ? 'Open purchase tools for this account.'
+                          : 'Show the lifetime unlock paywall for priority processing.'}
+                      </ThemedText>
+                    </View>
+                )}
+              </Pressable>
+
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Restore purchases"
+                accessibilityHint="Refreshes previous App Store purchases for this account."
+                accessibilityState={{ disabled: !purchasesReady }}
+                disabled={!purchasesReady}
+                onPress={() => void handleRestorePurchases()}>
+                {({ pressed }) => (
+                  <View style={[styles.actionCard, pressed && styles.pressed, !purchasesReady && styles.disabledCard]}>
+                    <ThemedText style={styles.actionTitle}>Restore purchases</ThemedText>
+                    <ThemedText themeColor="textSecondary">Refresh previous App Store purchases for this account.</ThemedText>
+                  </View>
+                )}
+              </Pressable>
+
+              {hasProAccess ? (
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel="Manage purchase"
+                  accessibilityHint="Opens purchase and restore tools for this account."
+                  accessibilityState={{ disabled: !purchasesReady }}
+                  disabled={!purchasesReady}
+                  onPress={() => void handleOpenCustomerCenter()}>
+                  {({ pressed }) => (
+                    <View style={[styles.actionCard, pressed && styles.pressed]}>
+                      <ThemedText style={styles.actionTitle}>Manage purchase</ThemedText>
+                      <ThemedText themeColor="textSecondary">Open purchase and restore tools for this account.</ThemedText>
+                    </View>
+                  )}
+                </Pressable>
+              ) : null}
+            </>
+          ) : null}
 
           {isAuthenticated ? (
             <>
               <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Sign out"
+                accessibilityHint="Signs out and returns to the login screen."
                 onPress={() => {
-                  void logout();
+                  void logout().then(() => {
+                    router.replace('/sign-in');
+                  });
                 }}>
                 {({ pressed }) => (
                   <View style={[styles.actionCard, pressed && styles.pressed]}>
@@ -64,6 +168,13 @@ export default function AccountScreen() {
               </Pressable>
 
               <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={isDeleteArmed ? 'Confirm permanent account deletion' : 'Delete account'}
+                accessibilityHint={
+                  isDeleteArmed
+                    ? 'Permanently removes your account, readings, reminders, images, and associated access.'
+                    : 'Arms account deletion. Tap again to permanently delete.'
+                }
                 onPress={() => {
                   if (!isDeleteArmed) {
                     setIsDeleteArmed(true);
@@ -138,6 +249,23 @@ const styles = StyleSheet.create({
     lineHeight: 22,
     fontWeight: '800',
   },
+  proCard: {
+    padding: 18,
+    borderRadius: 20,
+    backgroundColor: '#1756D1',
+    gap: 6,
+  },
+  proTitle: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    lineHeight: 20,
+    fontWeight: '800',
+  },
+  proBody: {
+    color: '#EAF1FF',
+    fontSize: 14,
+    lineHeight: 20,
+  },
   actionCard: {
     padding: 18,
     borderRadius: 20,
@@ -171,5 +299,8 @@ const styles = StyleSheet.create({
   },
   pressed: {
     opacity: 0.86,
+  },
+  disabledCard: {
+    opacity: 0.55,
   },
 });
