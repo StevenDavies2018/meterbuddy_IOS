@@ -2,7 +2,7 @@ import { createContext, ReactNode, startTransition, useContext, useEffect, useMe
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Platform } from 'react-native';
 import Purchases, { CustomerInfo, LOG_LEVEL } from 'react-native-purchases';
-import RevenueCatUI from 'react-native-purchases-ui';
+import RevenueCatUI, { PAYWALL_RESULT } from 'react-native-purchases-ui';
 
 import { supabase } from '@/lib/supabase';
 import { getMeterOption } from '@/models/meter-data';
@@ -531,6 +531,11 @@ export function AppFlowProvider({ children }: { children: ReactNode }) {
       requiredEntitlementIdentifier: REVENUECAT_PAYWALL_ENTITLEMENT,
       displayCloseButton: true,
     });
+    console.log('RevenueCat paywall result', paywallResult);
+
+    if (paywallResult === PAYWALL_RESULT.ERROR) {
+      throw new Error('The purchase screen closed because the App Store purchase failed. Check your Apple ID, sandbox account, and in-app purchase status.');
+    }
 
     const customerInfo = await Purchases.getCustomerInfo();
     const entitlementActive = hasRevenueCatProAccess(customerInfo);

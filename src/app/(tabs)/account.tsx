@@ -30,7 +30,13 @@ export default function AccountScreen() {
 
       if (unlocked) {
         Alert.alert('MeterBuddy Pro unlocked', 'Your Pro access is now active on this account.');
+        return;
       }
+
+      Alert.alert(
+        'Purchase not completed',
+        'The App Store purchase did not finish. If Apple asked you to sign in, try again with a valid sandbox tester or Apple ID for this device.'
+      );
     } catch (error) {
       Alert.alert('Purchases unavailable', error instanceof Error ? error.message : 'RevenueCat is not ready yet.');
     }
