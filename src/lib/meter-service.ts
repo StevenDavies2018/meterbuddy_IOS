@@ -84,17 +84,27 @@ export async function requestAccountDeletion() {
   }
 }
 
-export async function fetchMeterRecords() {
-  const {
-    data: { user },
-    error: userError,
-  } = await supabase.auth.getUser();
+export async function fetchMeterRecords(userId?: string | null) {
+  let resolvedUserId = userId ?? null;
 
-  if (userError) {
-    throw userError;
+  if (!resolvedUserId) {
+    const {
+      data: { user },
+      error: userError,
+    } = await supabase.auth.getUser();
+
+    if (userError) {
+      throw userError;
+    }
+
+    if (!user) {
+      return { readings: [], results: [], reminders: [] };
+    }
+
+    resolvedUserId = user.id;
   }
 
-  if (!user) {
+  if (!resolvedUserId) {
     return { readings: [], results: [], reminders: [] };
   }
 
@@ -102,14 +112,17 @@ export async function fetchMeterRecords() {
     supabase
       .from('readings')
       .select('id,meter_type,image_path,captured_at,ai_reading_value,ai_confidence,confirmed_value,units')
+      .eq('user_id', resolvedUserId)
       .order('captured_at', { ascending: false }),
     supabase
       .from('results')
       .select('id,meter_type,current_reading_id,previous_reading_id,usage_value,calculated_at')
+      .eq('user_id', resolvedUserId)
       .order('calculated_at', { ascending: false }),
     supabase
       .from('reminders')
       .select('id,meter_type,next_due_at,active')
+      .eq('user_id', resolvedUserId)
       .order('next_due_at', { ascending: true }),
   ]);
 

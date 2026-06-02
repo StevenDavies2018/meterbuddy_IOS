@@ -211,7 +211,7 @@ export function AppFlowProvider({ children }: { children: ReactNode }) {
           return;
         }
 
-        const remote = await fetchMeterRecords();
+        const remote = await fetchMeterRecords(session.user.id);
 
         if (cancelled) return;
 
@@ -225,7 +225,8 @@ export function AppFlowProvider({ children }: { children: ReactNode }) {
         });
       } catch (error) {
         if (cancelled) return;
-        setLastError(error instanceof Error ? error.message : 'Failed to connect to Supabase.');
+        console.error('Supabase bootstrap failed', error);
+        setLastError(getErrorMessage(error, 'Failed to connect to Supabase.'));
       } finally {
         if (!cancelled) {
           setIsBootstrapping(false);
@@ -254,7 +255,7 @@ export function AppFlowProvider({ children }: { children: ReactNode }) {
         return;
       }
 
-      fetchMeterRecords()
+      fetchMeterRecords(session.user.id)
         .then((remote) => {
           if (cancelled) return;
           startTransition(() => {
@@ -265,7 +266,8 @@ export function AppFlowProvider({ children }: { children: ReactNode }) {
         })
         .catch((error) => {
           if (cancelled) return;
-          setLastError(error instanceof Error ? error.message : 'Failed to refresh account data.');
+          console.error('Supabase account refresh failed', error);
+          setLastError(getErrorMessage(error, 'Failed to refresh account data.'));
         });
     });
 
@@ -358,7 +360,7 @@ export function AppFlowProvider({ children }: { children: ReactNode }) {
       const response = await createAccount(email, password);
 
       if (response.session?.user) {
-        const remote = await fetchMeterRecords();
+        const remote = await fetchMeterRecords(response.session.user.id);
         startTransition(() => {
           setAuthUserId(response.session?.user?.id ?? null);
           setAuthEmail(response.session?.user?.email ?? null);
@@ -372,7 +374,7 @@ export function AppFlowProvider({ children }: { children: ReactNode }) {
 
       setAuthNotice('Account created. Check your email to confirm it, then sign in with your password.');
     } catch (error) {
-      setLastError(error instanceof Error ? error.message : 'Failed to create account.');
+      setLastError(getErrorMessage(error, 'Failed to create account.'));
       throw error;
     } finally {
       setIsAuthenticating(false);
@@ -386,8 +388,8 @@ export function AppFlowProvider({ children }: { children: ReactNode }) {
 
     try {
       await signInWithPassword(email, password);
-      const remote = await fetchMeterRecords();
       const session = await ensureAnonymousSession();
+      const remote = await fetchMeterRecords(session?.user?.id);
 
       startTransition(() => {
         setAuthUserId(session?.user?.id ?? null);
@@ -398,7 +400,7 @@ export function AppFlowProvider({ children }: { children: ReactNode }) {
         setAuthNotice(null);
       });
     } catch (error) {
-      setLastError(error instanceof Error ? error.message : 'Failed to sign in.');
+      setLastError(getErrorMessage(error, 'Failed to sign in.'));
       throw error;
     } finally {
       setIsAuthenticating(false);
@@ -422,7 +424,7 @@ export function AppFlowProvider({ children }: { children: ReactNode }) {
       await requestPasswordReset(normalizedEmail);
       setAuthNotice('Password reset email sent. Check your inbox for the reset link.');
     } catch (error) {
-      setLastError(error instanceof Error ? error.message : 'Failed to send password reset email.');
+      setLastError(getErrorMessage(error, 'Failed to send password reset email.'));
       throw error;
     } finally {
       setIsAuthenticating(false);
@@ -513,7 +515,7 @@ export function AppFlowProvider({ children }: { children: ReactNode }) {
         setCaptureDraft(null);
       });
     } catch (error) {
-      setLastError(error instanceof Error ? error.message : 'Failed to save the reading.');
+      setLastError(getErrorMessage(error, 'Failed to save the reading.'));
       throw error;
     } finally {
       setIsSaving(false);
@@ -650,6 +652,21 @@ function hasRevenueCatProAccess(customerInfo: CustomerInfo) {
 
 function hasRevenueCatEntitlement(customerInfo: CustomerInfo, entitlementKey: string) {
   return typeof customerInfo.entitlements.active[entitlementKey] !== 'undefined';
+}
+
+function getErrorMessage(error: unknown, fallback: string) {
+  if (error instanceof Error && error.message) {
+    return error.message;
+  }
+
+  if (typeof error === 'object' && error !== null && 'message' in error) {
+    const message = (error as { message?: unknown }).message;
+    if (typeof message === 'string' && message.trim()) {
+      return message;
+    }
+  }
+
+  return fallback;
 }
 
 function dedupeReadings(items: ReadingRecord[]) {
