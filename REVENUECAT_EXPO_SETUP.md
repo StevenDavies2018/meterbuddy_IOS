@@ -26,7 +26,7 @@ eas build --platform ios --profile ios-development
 The iOS RevenueCat public SDK key is read from:
 
 ```env
-EXPO_PUBLIC_REVENUECAT_APPLE_API_KEY=test_dpXRsCNTdUjYLcwnWUzmoyBapzw
+EXPO_PUBLIC_REVENUECAT_APPLE_API_KEY=appl_FdExZKNWDfyvzSdWwdXMqkGxHVQ
 ```
 
 This lives in `.env.local` for local development. Add the same value to EAS environment variables for cloud builds if needed.
