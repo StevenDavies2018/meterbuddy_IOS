@@ -87,99 +87,97 @@ export function AppFlowProvider({ children }: { children: ReactNode }) {
   const [hasCompletedOnboarding, setHasCompletedOnboarding] = useState(false);
   const [authUserId, setAuthUserId] = useState<string | null>(null);
   const [authEmail, setAuthEmail] = useState<string | null>(null);
-  const [purchasesReady, setPurchasesReady] = useState(false);
+  const [purchasesReady, setPurchasesReady] = useState(Boolean(revenueCatAppleApiKey));
   const [hasProAccess, setHasProAccess] = useState(false);
   const [lastError, setLastError] = useState<string | null>(null);
   const [authNotice, setAuthNotice] = useState<string | null>(null);
   const captureUploadPayloadRef = useRef<{ imageBase64?: string; mimeType?: string | null } | null>(null);
+  const revenueCatConfiguredRef = useRef(false);
+  const revenueCatConfigurePromiseRef = useRef<Promise<void> | null>(null);
 
-  useEffect(() => {
+  async function ensureRevenueCatConfigured() {
     if (Platform.OS !== 'ios') {
-      return;
+      throw new Error('Purchases are only available in the iOS build.');
     }
 
     if (!revenueCatAppleApiKey) {
       setPurchasesReady(false);
       setHasProAccess(false);
+      throw new Error('RevenueCat is not configured for this build.');
+    }
+
+    if (revenueCatConfiguredRef.current) {
       return;
     }
 
-    const revenueCatApiKey: string = revenueCatAppleApiKey;
+    if (revenueCatConfigurePromiseRef.current) {
+      await revenueCatConfigurePromiseRef.current;
+      return;
+    }
 
-    Purchases.setLogLevel(LOG_LEVEL.VERBOSE);
-
-    let listenerActive = true;
-    const customerInfoListener = (customerInfo: CustomerInfo) => {
-      if (!listenerActive) return;
-      setHasProAccess(hasRevenueCatProAccess(customerInfo));
-    };
-
-    async function configureRevenueCat() {
+    revenueCatConfigurePromiseRef.current = (async () => {
       try {
+        Purchases.setLogLevel(LOG_LEVEL.VERBOSE);
         const configured = await Purchases.isConfigured();
 
         if (!configured) {
           Purchases.configure({
-            apiKey: revenueCatApiKey,
+            apiKey: revenueCatAppleApiKey,
           });
         }
 
-        Purchases.addCustomerInfoUpdateListener(customerInfoListener);
+        Purchases.addCustomerInfoUpdateListener((customerInfo) => {
+          setHasProAccess(hasRevenueCatProAccess(customerInfo));
+        });
+
+        if (authUserId) {
+          const { customerInfo } = await Purchases.logIn(authUserId);
+          setHasProAccess(hasRevenueCatProAccess(customerInfo));
+        }
+
         const customerInfo = await Purchases.getCustomerInfo();
 
-        if (!listenerActive) return;
-
+        revenueCatConfiguredRef.current = true;
         setPurchasesReady(true);
         setHasProAccess(hasRevenueCatProAccess(customerInfo));
       } catch (error) {
-        if (!listenerActive) return;
+        revenueCatConfiguredRef.current = false;
+        revenueCatConfigurePromiseRef.current = null;
         console.error('RevenueCat configuration failed', error);
         setPurchasesReady(false);
         setHasProAccess(false);
+        throw error;
       }
-    }
+    })();
 
-    void configureRevenueCat();
-
-    return () => {
-      listenerActive = false;
-      Purchases.removeCustomerInfoUpdateListener(customerInfoListener);
-    };
-  }, []);
+    await revenueCatConfigurePromiseRef.current;
+  }
 
   useEffect(() => {
-    if (Platform.OS !== 'ios' || !revenueCatAppleApiKey || !purchasesReady) {
+    if (!revenueCatConfiguredRef.current) {
       return;
     }
 
     let cancelled = false;
 
-    async function syncRevenueCatIdentity() {
-      try {
-        if (authUserId) {
-          const { customerInfo } = await Purchases.logIn(authUserId);
-          if (!cancelled) {
-            setHasProAccess(hasRevenueCatProAccess(customerInfo));
-          }
-          return;
-        }
+    const identityPromise = authUserId ? Purchases.logIn(authUserId).then(({ customerInfo }) => customerInfo) : Purchases.logOut();
 
-        const customerInfo = await Purchases.logOut();
+    identityPromise
+      .then((customerInfo) => {
         if (!cancelled) {
           setHasProAccess(hasRevenueCatProAccess(customerInfo));
         }
-      } catch (error) {
-        if (cancelled) return;
-        console.error('RevenueCat identity sync failed', error);
-      }
-    }
-
-    void syncRevenueCatIdentity();
+      })
+      .catch((error) => {
+        if (!cancelled) {
+          console.error('RevenueCat identity sync failed', error);
+        }
+      });
 
     return () => {
       cancelled = true;
     };
-  }, [authUserId, purchasesReady]);
+  }, [authUserId]);
 
   useEffect(() => {
     let cancelled = false;
@@ -434,6 +432,14 @@ export function AppFlowProvider({ children }: { children: ReactNode }) {
   async function logout() {
     setLastError(null);
     await signOut();
+    if (revenueCatConfiguredRef.current) {
+      try {
+        const customerInfo = await Purchases.logOut();
+        setHasProAccess(hasRevenueCatProAccess(customerInfo));
+      } catch (error) {
+        console.error('RevenueCat logout failed', error);
+      }
+    }
     startTransition(() => {
       captureUploadPayloadRef.current = null;
       setAuthUserId(null);
@@ -523,9 +529,7 @@ export function AppFlowProvider({ children }: { children: ReactNode }) {
   }
 
   async function showProPaywall() {
-    if (Platform.OS !== 'ios' || !revenueCatAppleApiKey) {
-      throw new Error('RevenueCat is not configured for this build.');
-    }
+    await ensureRevenueCatConfigured();
 
     const paywallResult = await RevenueCatUI.presentPaywallIfNeeded({
       requiredEntitlementIdentifier: REVENUECAT_PAYWALL_ENTITLEMENT,
@@ -545,18 +549,14 @@ export function AppFlowProvider({ children }: { children: ReactNode }) {
   }
 
   async function restorePurchases() {
-    if (Platform.OS !== 'ios' || !revenueCatAppleApiKey) {
-      throw new Error('RevenueCat is not configured for this build.');
-    }
+    await ensureRevenueCatConfigured();
 
     const customerInfo = await Purchases.restorePurchases();
     setHasProAccess(hasRevenueCatProAccess(customerInfo));
   }
 
   async function openCustomerCenter() {
-    if (Platform.OS !== 'ios' || !revenueCatAppleApiKey) {
-      throw new Error('RevenueCat is not configured for this build.');
-    }
+    await ensureRevenueCatConfigured();
 
     await RevenueCatUI.presentCustomerCenter();
   }
