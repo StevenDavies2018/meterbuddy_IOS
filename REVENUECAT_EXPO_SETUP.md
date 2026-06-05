@@ -3,7 +3,6 @@
 This repo uses RevenueCat through Expo with:
 
 - `react-native-purchases`
-- `react-native-purchases-ui`
 
 The SDK is configured from JavaScript in `src/stores/app-flow.tsx`. Do not add the native Kotlin/Swift setup snippets to this Expo app.
 
@@ -12,7 +11,7 @@ The SDK is configured from JavaScript in `src/stores/app-flow.tsx`. Do not add t
 Already installed with:
 
 ```bash
-npx expo install react-native-purchases react-native-purchases-ui
+npx expo install react-native-purchases
 ```
 
 Because RevenueCat includes native code, rebuild the iOS app after installing or changing native dependencies:
@@ -90,8 +89,7 @@ It handles:
 - auth identity syncing with `Purchases.logIn(authUserId)`
 - entitlement updates with `Purchases.addCustomerInfoUpdateListener(...)`
 - restore purchases with `Purchases.restorePurchases()`
-- paywall presentation with `RevenueCatUI.presentPaywallIfNeeded(...)`
-- customer center with `RevenueCatUI.presentCustomerCenter()`
+- lifetime package purchase with `Purchases.getOfferings()` and `Purchases.purchasePackage(...)`
 
 The app checks:
 
@@ -137,7 +135,7 @@ Uses `hasProAccess` to skip the standard processing queue for Pro users.
 3. Sign in to MeterBuddy.
 4. Open `Account`.
 5. Tap `Unlock MeterBuddy Pro`.
-6. Confirm the RevenueCat paywall opens.
+6. Confirm the App Store purchase sheet opens.
 7. Complete a sandbox purchase.
 8. Confirm account status changes to `Unlocked`.
 9. Tap `Restore purchases` and confirm it succeeds.
@@ -148,6 +146,6 @@ Uses `hasProAccess` to skip the standard processing queue for Pro users.
 - Keep RevenueCat as the source of truth for purchase state in the app.
 - Use `CustomerInfo.entitlements.active` instead of storing purchase flags only in local state.
 - Use `Purchases.logIn(authUserId)` after Supabase auth so RevenueCat purchases attach to the MeterBuddy account.
-- Use RevenueCat Paywalls and Offerings instead of hardcoding product buttons in the app.
-- Use Customer Center when users need restore, subscription management, or billing tools.
+- Use RevenueCat Offerings instead of hardcoding store product identifiers in the app.
+- Use restore purchases for lifetime unlock recovery.
 - Do not store `.p8` App Store Connect keys in the repo or `.env.local`; upload those only to RevenueCat.

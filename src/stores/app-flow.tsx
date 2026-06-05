@@ -2,7 +2,6 @@ import { createContext, ReactNode, startTransition, useContext, useEffect, useMe
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Platform } from 'react-native';
 import Purchases, { CustomerInfo, LOG_LEVEL } from 'react-native-purchases';
-import RevenueCatUI, { PAYWALL_RESULT } from 'react-native-purchases-ui';
 
 import { supabase } from '@/lib/supabase';
 import { getMeterOption } from '@/models/meter-data';
@@ -23,6 +22,7 @@ import {
 const REVENUECAT_PAYWALL_ENTITLEMENT = 'meterbuddy Pro';
 const REVENUECAT_PRO_ENTITLEMENT = 'meterbuddy_pro';
 const REVENUECAT_LEGACY_PRO_ENTITLEMENT = 'lifetime_unlock';
+const REVENUECAT_OFFERING_IDENTIFIER = 'meterbuddy_pro';
 const REVENUECAT_PRO_ENTITLEMENTS = [
   REVENUECAT_PAYWALL_ENTITLEMENT,
   REVENUECAT_PRO_ENTITLEMENT,
@@ -531,21 +531,33 @@ export function AppFlowProvider({ children }: { children: ReactNode }) {
   async function showProPaywall() {
     await ensureRevenueCatConfigured();
 
-    const paywallResult = await RevenueCatUI.presentPaywallIfNeeded({
-      requiredEntitlementIdentifier: REVENUECAT_PAYWALL_ENTITLEMENT,
-      displayCloseButton: true,
-    });
-    console.log('RevenueCat paywall result', paywallResult);
+    const existingCustomerInfo = await Purchases.getCustomerInfo();
+    const alreadyUnlocked = hasRevenueCatProAccess(existingCustomerInfo);
 
-    if (paywallResult === PAYWALL_RESULT.ERROR) {
-      throw new Error('The purchase screen closed because the App Store purchase failed. Check your Apple ID, sandbox account, and in-app purchase status.');
+    if (alreadyUnlocked) {
+      setHasProAccess(true);
+      return true;
     }
 
-    const customerInfo = await Purchases.getCustomerInfo();
+    const offerings = await Purchases.getOfferings();
+    const offering =
+      offerings.all[REVENUECAT_OFFERING_IDENTIFIER] ??
+      offerings.current ??
+      Object.values(offerings.all)[0];
+    const lifetimePackage =
+      offering?.lifetime ??
+      offering?.availablePackages.find((item) => item.identifier === '$rc_lifetime') ??
+      offering?.availablePackages[0];
+
+    if (!lifetimePackage) {
+      throw new Error('MeterBuddy Pro is not available yet. Please try again later.');
+    }
+
+    const { customerInfo } = await Purchases.purchasePackage(lifetimePackage);
     const entitlementActive = hasRevenueCatProAccess(customerInfo);
     setHasProAccess(entitlementActive);
 
-    return entitlementActive || paywallResult === 'PURCHASED' || paywallResult === 'RESTORED';
+    return entitlementActive;
   }
 
   async function restorePurchases() {
@@ -556,9 +568,7 @@ export function AppFlowProvider({ children }: { children: ReactNode }) {
   }
 
   async function openCustomerCenter() {
-    await ensureRevenueCatConfigured();
-
-    await RevenueCatUI.presentCustomerCenter();
+    await restorePurchases();
   }
 
   const value = useMemo(
